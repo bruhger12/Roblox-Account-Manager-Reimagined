@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>RamReimagined</RootNamespace>
+    <AssemblyName>RobloxAccountManagerReimagined</AssemblyName>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyTitle>Roblox Account Manager Reimagined</AssemblyTitle>
+    <Product>Roblox Account Manager Reimagined</Product>
+    <Version>1.0.0</Version>
+    <Authors>bruhger12</Authors>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Custom-painted controls are built in code, not by the WinForms designer. -->
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
+  </PropertyGroup>
+
+</Project>
