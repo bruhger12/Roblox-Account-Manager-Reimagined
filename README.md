@@ -1,157 +1,102 @@
 # Roblox Account Manager Reimagined
 
-A ground-up rebuild of [ic3w0lf22/Roblox-Account-Manager](https://github.com/ic3w0lf22/Roblox-Account-Manager)
-(the original WinForms app, archived in 2024), updated for the Roblox client and
-web APIs as they exist today and given a completely new interface.
+A modern rebuild of [ic3w0lf22's Roblox Account Manager](https://github.com/ic3w0lf22/Roblox-Account-Manager): a Windows desktop tool for keeping several Roblox accounts signed in, checking which of them are online, browsing public servers and launching clients into a place as any of them.
 
-The original sources are still in this fork under `RBX Alt Manager/` for
-reference. The app you get when you build is the new one in `src/RamReimagined`.
-
-```
-dotnet build
-dotnet run --project src/RamReimagined
-```
-
----
+This is an independent GPL-3.0 fork. It is not affiliated with Roblox Corporation.
 
 ## What changed
 
-### Interface
+The original manager was a .NET Framework 4.7.2 WinForms app whose endpoints had drifted and whose UI had grown around a grid of dialogs. This fork is a .NET 9 WinForms application with a new shell, a current endpoint layer and no injected client code.
 
-The old app was a stack of WinForms designer dialogs with its own tab control and
-theme editor. Reimagined is a single borderless window with:
+- Accounts, presence, thumbnails, server lists and authentication tickets use Roblox's current public endpoints.
+- Sessions are protected with Windows DPAPI for the signed-in Windows user.
+- The UI is drawn from scratch: no icon font, no image assets, no design system package.
+- Multi-instance support only holds the two kernel objects Roblox itself uses. Nothing is patched into the client.
 
-- A **sidebar rail** — Accounts, Servers, Tools, Settings, About — with an accent
-  highlight, brand mark and a live "Roblox client detected" status.
-- A **page header** with a title, one-line explanation and the actions that belong
-  to that page, so nothing important is hidden in a context menu.
-- **Custom-painted account cards** — avatar, display name, handle, user ID, tag,
-  presence dot and a presence chip, with select-on-click, an inline Launch button
-  and a small menu for the rest. Cards are painted, not compiled from stock
-  controls, so hover, selection and density are consistent.
-- **A real server browser** — place ID, game name, player counts, ping, FPS and a
-  Join action per server, instead of a generic list dialog.
-- **Inline toasts** for every action (added, removed, launched, expired session)
-  rather than modal message boxes.
-- **Accent palette** (violet, cyan, emerald, magenta, amber) applied instantly
-  across the whole shell; the choice is remembered.
-- Consistent dark palette, rounded surfaces, vector icons drawn in code (no icon
-  font, no image assets, no external theme files).
+## Browser sign-in, restored
 
-### Behaviour and APIs
+The original's most-missed feature was the disposable browser that adds an account just because you signed into it. It is back, with the same behaviour on a WebView2 host:
 
-| Area | Original | Reimagined |
-|---|---|---|
-| Session check | `users.roblox.com/v0` style calls, later removed | `GET users.roblox.com/v1/users/authenticated` |
-| Launch | ticket + hand-built `assetgame` URL | ticket + `https://www.roblox.com/games/start?placeId=…&gameInstanceId=…` |
-| CSRF | retried ad hoc | every POST retries once on the `403` CSRF challenge, token cached per cookie |
-| Cookie refresh | not handled | refreshed `.ROBLOSECURITY` from `Set-Cookie` is written back to the store |
-| Presence | polling loop in the UI thread | `POST presence.roblox.com/v1/presence/users`, batched per refresh, one viewer cookie |
-| Avatars / icons | downloader with a settings page | cached thumbnail loader with per-session memory cache |
-| Servers | list dialog | `games.roblox.com/v1/games/{place}/servers/Public` with population, ping and FPS |
-| Storage | JSON with DPAPI | JSON with DPAPI (CurrentUser), atomic writes, corruption-safe load |
-| Multi-instance | singleton objects in the main form | encapsulated lock with an explicit enable/disable state and status text |
-| Fast flags | file patcher dialog | one-click preset write to the newest build's `ClientAppSettings.json`, with backup and clear |
-| Graphics | manual settings | writes `SavedQualityLevel` into `GlobalBasicSettings_13.xml`, keeping a `.ram-backup` |
-| Client windows | window tools | grid tiling across running `RobloxPlayerBeta` windows |
+- **Sign in with browser** clears the cookie jar, opens `roblox.com/login` in a dedicated window and waits.
+- When the session lands on Roblox after login, the window reads `.ROBLOSECURITY`, validates it with `users.roblox.com` and adds the account.
+- The cookie jar is then wiped and the window hides. The next sign-in starts clean.
+- **Open in browser** on any account seeds that stored cookie and opens `roblox.com/home` as that account.
+- Closing the browser window always wipes cookies, so a disposed window cannot leak a session.
 
-Notes on the modern launch path:
+No password is requested or stored.
 
-- Roblox rejects password logins from third-party tools, so accounts are added
-  from an existing browser session. Paste `.ROBLOSECURITY` (DevTools →
-  Application → Cookies → roblox.com) and the app validates it against
-  `users.roblox.com` before storing anything.
-- Tickets are requested with `POST auth.roblox.com/v1/authentication-ticket/`,
-  including the `Referer`/`Origin` pair and an automatically retried CSRF token.
-  The client is started as
-  `RobloxPlayerBeta.exe --app -t <ticket> -j <start url> -b <tracker>`.
-- Multi-instance support only creates the `ROBLOX_singletonMutex` and
-  `ROBLOX_singletonEvent` kernel objects in the session namespace. Nothing is
-  injected, no client file is patched, and no other process is touched. Roblox
-  has described multi-instancing as potentially malicious behaviour, so this
-  remains at your own risk.
+## Other account tools
 
----
+- Paste a single cookie, or import many cookies at once (one per line) with per-session validation.
+- Per-account tag and a local note, both searchable.
+- Select several accounts and launch, mute, include or remove them as a batch.
+- Recent places are remembered from successful launches and offered beside the place field.
+- Presence refresh, avatar thumbnails, session revalidation and cookie copying.
 
-## Screens
+## Launching and servers
 
-**Accounts** — search, select, launch. Each card shows live presence; the toolbar
-takes a join place ID, so a batch launch is one click. The card menu holds copy
-cookie, copy user ID, mute for batch launches, tag and remove.
+- Launching trades the stored cookie for a fresh authentication ticket and starts `RobloxPlayerBeta.exe` with the modern `--app -t ... -j https://www.roblox.com/games/start?...` arguments.
+- Public server discovery uses `games.roblox.com`, with population, ping and FPS shown as measured values.
+- Multi-instance, fast flags, lowest graphics quality, window tiling and data folders live on one Tools page.
+- Every account launch can be staggered, and batch launches can be confirmed first.
 
-**Servers** — load any place's public servers, see population, ping and FPS, then
-drop every selected account into that exact server.
+## Design
 
-**Tools** — multi-instance lock, lowest graphics, recommended fast flags (and a
-clear button), presence refresh, client window tiling and shortcuts to the Roblox
-and app data folders.
+The visual system follows the owner's design vault rather than a generic dark dashboard:
 
-**Settings** — default place, launch stagger, presence interval, server page size,
-lowest graphics before launch, tiling, batch confirmation and the accent palette.
-Everything is saved immediately to `%APPDATA%\RobloxAccountManagerReimagined`.
+- Near-black ground `#08080A`, bone ink `#E9E6E0`, one accent at a time, status colours only for status.
+- Separations are hairlines and small tonal steps, with no gradients, glows or shadows on resting surfaces.
+- Words use a grotesque; monospaced type is reserved for measured values such as user IDs, job IDs, ping, FPS and counts.
+- Functional text is at least 11 px and running text at least 12 px.
+- Every custom control has hover, keyboard focus and active states, and supports Tab, Space and Enter.
 
-**About** — what this fork is, what it deliberately does not do, and the current
-environment (client path, account file, multi-instance state).
+## Requirements
 
----
+- Windows 10 or 11, x64.
+- Roblox Player installed for the Windows user that runs the app.
+- Microsoft Edge WebView2 runtime for the embedded browser. It ships with current Windows and with Microsoft Edge; if it is missing, the app still runs and the browser window explains what to install.
+- .NET 9 SDK to build from source.
+
+## Build
+
+```bat
+build.bat
+```
+
+or
+
+```bat
+dotnet publish "Roblox Account Manager Reimagined.sln" -c Release -r win-x64 --self-contained false -o dist
+```
+
+The only NuGet dependency is `Microsoft.Web.WebView2`. Everything else uses the base class library.
+
+## Data
+
+Everything is per Windows user, under `%APPDATA%\RobloxAccountManagerReimagined`:
+
+- `accounts.json`: sessions protected with DPAPI, plus tags and notes.
+- `settings.json`: launch, refresh, accent and recent-place preferences.
+- `avatars\`: cached headshots.
+- `browser\`: the disposable WebView2 profile.
+
+Roblox's own files are only touched by the optional fast-flag and graphics-quality tools, which keep a `.ram-backup` beside anything they rewrite.
 
 ## Layout
 
 ```
 src/RamReimagined/
-  Program.cs                 entry point
-  Core/
-    RobloxApi.cs             authenticated requests, CSRF retry, presence, servers, thumbnails
-    RobloxLauncher.cs        ticket exchange, launch, fast flags, quality, tiling, singleton lock
-    AccountStore.cs          account model, DPAPI store, cookie normalisation
-    Protection.cs            CryptProtectData / CryptUnprotectData interop
-    AppPaths.cs              per-user paths + settings persistence
-  UI/
-    MainForm.cs              borderless shell, rail, header, page routing, hit-test resizing
-    Theme.cs                 palette, fonts, rounded geometry, text helpers
-    AppState.cs              shared state, presence refresh, batch launch
-    Dialogs.cs               styled modal sheets and the status toast
-    Controls/                pill buttons, toggles, text fields, account card, server row, icons
-    Pages/                   Accounts, Servers, Tools, Settings, About
+  Core/        Roblox endpoints, launcher, DPAPI store, settings, paths
+  UI/          Theme, shell, browser window, dialogs, custom controls
+  UI/Pages/    Accounts, Servers, Tools, Settings, About
 ```
 
-No NuGet dependencies: WinForms, `System.Text.Json` and `System.Net.Http` from the
-shared framework, plus `crypt32` interop for DPAPI.
-
----
-
-## Requirements
-
-- Windows 10/11
-- .NET 9 SDK (or the .NET 9 desktop runtime for a published build)
-- The Roblox client installed for the account you are signed in with
-
-## Build
-
-```
-build.bat            # framework-dependent build into dist\
-```
-
-or:
-
-```
-dotnet publish src/RamReimagined -c Release -o dist
-```
-
----
-
-## Security and limits
-
-- Cookies are encrypted with Windows DPAPI for the current Windows user. The
-  account file is unreadable if copied to another user or machine.
-- The app never asks for a password and never performs a password login.
-- Sessions can expire (password change, Roblox invalidation). **Validate** in the
-  header checks every stored session and reports which ones died; re-add those.
-- No telemetry, no network calls other than the Roblox endpoints the features need.
-- Windows-only by construction (DPAPI, Win32 window handling, WinForms).
+Legacy upstream sources are kept in the repository history and in the upstream project for reference.
 
 ## License
 
-GPL-3.0, inherited from the upstream project. See `LICENSE`.
-Original work © ic3w0lf22; this fork © its contributors.
-Not affiliated with Roblox Corporation.
+GPL-3.0, inherited from the original project. See `LICENSE`.
+
+## Credits
+
+Original project and account-manager design by [ic3w0lf22](https://github.com/ic3w0lf22). This fork rebuilds the client and UI while keeping the same purpose and licence.

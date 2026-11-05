@@ -6,10 +6,13 @@ internal sealed class AccountsPage : PageView
 {
     private readonly TextField _search;
     private readonly TextField _place;
-    private readonly PillButton _add;
+    private readonly PillButton _recent;
+    private readonly PillButton _addBrowser;
+    private readonly PillButton _addCookie;
     private readonly PillButton _refresh;
     private readonly PillButton _launch;
     private readonly PillButton _selectAll;
+    private readonly PillButton _more;
     private readonly Panel _list;
     private readonly Label _count;
     private readonly System.Windows.Forms.Timer _debounce = new() { Interval = 200 };
@@ -18,13 +21,21 @@ internal sealed class AccountsPage : PageView
 
     public AccountsPage(AppState app) : base(app)
     {
-        _add = new PillButton("Add account", IconKind.Plus) { Kind = ButtonKind.Primary, Height = 38, Width = 148 };
-        _add.Click += async (_, _) => await AddAccountAsync();
+        _addBrowser = new PillButton("Sign in with browser", IconKind.Globe)
+        {
+            Kind = ButtonKind.Primary,
+            Height = 38,
+            Width = 194
+        };
+        _addBrowser.Click += (_, _) => OpenBrowser();
 
-        _refresh = new PillButton("Validate", IconKind.Refresh) { Kind = ButtonKind.Subtle, Height = 38, Width = 116 };
+        _addCookie = new PillButton("Use cookie", IconKind.Copy) { Kind = ButtonKind.Ghost, Height = 38, Width = 122 };
+        _addCookie.Click += async (_, _) => await AddByCookieAsync();
+
+        _refresh = new PillButton("Validate", IconKind.Refresh) { Kind = ButtonKind.Ghost, Height = 38, Width = 112 };
         _refresh.Click += async (_, _) => await ValidateAllAsync();
 
-        _search = new TextField("Search by name, @handle, tag or ID");
+        _search = new TextField("Search name, handle, tag, note or ID");
         _search.TextChanged += (_, _) =>
         {
             _debounce.Stop();
@@ -36,22 +47,28 @@ internal sealed class AccountsPage : PageView
             Rebuild();
         };
 
-        _place = new TextField("Join place ID");
+        _place = new TextField("Place ID");
         if (app.Settings.DefaultPlaceId > 0)
         {
             _place.Text = app.Settings.DefaultPlaceId.ToString();
         }
 
-        _launch = new PillButton("Launch selected", IconKind.Play) { Kind = ButtonKind.Primary, Height = 38, Width = 176 };
+        _recent = new PillButton("Recent", IconKind.Folder) { Kind = ButtonKind.Ghost, Height = 38, Width = 92 };
+        _recent.Click += (_, _) => ShowRecentMenu();
+
+        _launch = new PillButton("Launch selected", IconKind.Play) { Kind = ButtonKind.Primary, Height = 38, Width = 172 };
         _launch.Click += async (_, _) => await LaunchSelectionAsync();
 
-        _selectAll = new PillButton("Select all") { Kind = ButtonKind.Ghost, Height = 38, Width = 104 };
+        _selectAll = new PillButton("Select all") { Kind = ButtonKind.Ghost, Height = 38, Width = 96 };
         _selectAll.Click += (_, _) => ToggleSelectAll();
+
+        _more = new PillButton("", IconKind.More) { Kind = ButtonKind.Ghost, Height = 38, Width = 38 };
+        _more.Click += (_, _) => ShowActionsMenu();
 
         _count = new Label
         {
             AutoSize = false,
-            Font = Theme.Font(8.75f),
+            Font = Theme.Font(8.9f),
             ForeColor = Theme.Muted,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft
@@ -60,8 +77,10 @@ internal sealed class AccountsPage : PageView
         var toolbar = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Backdrop };
         toolbar.Controls.Add(_search);
         toolbar.Controls.Add(_place);
+        toolbar.Controls.Add(_recent);
         toolbar.Controls.Add(_count);
         toolbar.Controls.Add(_selectAll);
+        toolbar.Controls.Add(_more);
         toolbar.Controls.Add(_launch);
         toolbar.Resize += (_, _) => LayoutToolbar(toolbar);
 
@@ -85,6 +104,7 @@ internal sealed class AccountsPage : PageView
 
         App.AccountsChanged += (_, _) => Rebuild();
         App.PresenceChanged += (_, _) => ApplyPresence();
+        BrowserWindow.Instance.AccountAdded += (_, _) => Rebuild();
 
         Rebuild();
     }
@@ -97,7 +117,7 @@ internal sealed class AccountsPage : PageView
 
     public override string Subheading => "Sessions are encrypted with Windows DPAPI and never leave this machine.";
 
-    public override IReadOnlyList<Control> Actions => new Control[] { _add, _refresh };
+    public override IReadOnlyList<Control> Actions => new Control[] { _addBrowser, _addCookie, _refresh };
 
     public event EventHandler? OpenServersRequested;
 
@@ -105,12 +125,15 @@ internal sealed class AccountsPage : PageView
 
     private void LayoutToolbar(Panel toolbar)
     {
-        _search.SetBounds(0, 9, Math.Min(300, Math.Max(180, toolbar.ClientSize.Width / 3)), 38);
-        _place.SetBounds(_search.Right + 10, 9, 164, 38);
-        _launch.Location = new Point(toolbar.ClientSize.Width - _launch.Width, 9);
-        _selectAll.Location = new Point(_launch.Left - 8 - _selectAll.Width, 9);
-        _count.SetBounds(_place.Right + 14, 0,
-            Math.Max(80, _selectAll.Left - _place.Right - 26), 56);
+        var width = toolbar.ClientSize.Width;
+        _search.SetBounds(0, 9, Math.Min(290, Math.Max(150, width / 4)), 38);
+        _place.SetBounds(_search.Right + 8, 9, 140, 38);
+        _recent.SetBounds(_place.Right + 6, 9, 92, 38);
+
+        _launch.Location = new Point(width - _launch.Width, 9);
+        _more.Location = new Point(_launch.Left - 6 - _more.Width, 9);
+        _selectAll.Location = new Point(_more.Left - 4 - _selectAll.Width, 9);
+        _count.SetBounds(_recent.Right + 12, 0, Math.Max(40, _selectAll.Left - _recent.Right - 20), 56);
     }
 
     private void PaintEmptyState(Graphics g)
@@ -124,15 +147,15 @@ internal sealed class AccountsPage : PageView
         var empty = App.Store.Count == 0;
         var title = empty ? "No accounts yet" : "Nothing matches that search";
         var hint = empty
-            ? "Add an account with its .ROBLOSECURITY cookie, or paste one from a browser session."
-            : "Try another name, handle, tag or user ID.";
+            ? "Sign in with browser opens a disposable Roblox window. Once you are signed in, the account is added and the browser session is cleared."
+            : "Try another name, handle, tag, note or user ID.";
+
         var width = Math.Max(240, _list.ClientSize.Width - 80);
         var centerY = Math.Max(60, _list.ClientSize.Height / 2 - 40);
 
-        var titleFont = Theme.Font(13f, FontStyle.Bold);
-        Theme.DrawText(g, title, titleFont, Theme.Muted, new Rectangle(40, centerY, width, 26),
+        Theme.DrawText(g, title, Theme.Font(13f, FontStyle.Bold), Theme.Text, new Rectangle(40, centerY, width, 26),
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-        Theme.DrawText(g, hint, Theme.Font(9f), Theme.Faint, new Rectangle(40, centerY + 30, width, 40),
+        Theme.DrawText(g, hint, Theme.Font(9.2f), Theme.Muted, new Rectangle(40, centerY + 30, width, 52),
             TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.WordBreak);
     }
 
@@ -144,6 +167,7 @@ internal sealed class AccountsPage : PageView
                         || a.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
                         || a.Username.Contains(query, StringComparison.OrdinalIgnoreCase)
                         || (a.Tag?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+                        || (a.Notes?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
                         || a.UserId.ToString().Contains(query, StringComparison.Ordinal))
             .ToList();
 
@@ -166,6 +190,7 @@ internal sealed class AccountsPage : PageView
 
             card.SetPresence(App.Presence.TryGetValue(account.UserId, out var presence) ? presence : null);
             card.Selected = App.SelectedUserIds.Contains(account.UserId);
+            card.RefreshFromAccount();
             card.Visible = true;
         }
 
@@ -194,7 +219,7 @@ internal sealed class AccountsPage : PageView
             }
 
             card.SetBounds(0, y, width, 84);
-            y += 94;
+            y += 92;
         }
 
         _list.AutoScrollMinSize = new Size(0, y + 2);
@@ -206,7 +231,13 @@ internal sealed class AccountsPage : PageView
         var total = App.Store.Count;
         var selected = App.SelectedUserIds.Count;
         var shown = visible == total ? $"{total} account{(total == 1 ? "" : "s")}" : $"{visible} of {total} shown";
-        _count.Text = $"{shown}  ·  {selected} selected";
+        _count.Text = $"{shown} · {selected} selected";
+
+        var hasAccounts = total > 0;
+        _launch.Visible = hasAccounts;
+        _selectAll.Visible = hasAccounts;
+        _count.Visible = hasAccounts;
+        _addBrowser.Kind = hasAccounts ? ButtonKind.Subtle : ButtonKind.Primary;
     }
 
     private void Wire(AccountCard card)
@@ -227,6 +258,7 @@ internal sealed class AccountsPage : PageView
 
         card.LaunchRequested += async (_, _) => await LaunchAsync(new[] { card.Account });
         card.ServersRequested += (_, _) => OpenServersRequested?.Invoke(this, EventArgs.Empty);
+        card.BrowserRequested += (_, _) => BrowserWindow.Instance.EnterBrowserMode(card.Account);
         card.CopyCookieRequested += (_, _) => CopyCookie(card.Account);
         card.CopyUserIdRequested += (_, _) =>
         {
@@ -243,7 +275,134 @@ internal sealed class AccountsPage : PageView
                 : $"{card.Account.Name} is muted for batch launches.", ToastKind.Info);
         };
         card.TagRequested += (_, _) => EditTag(card.Account);
+        card.NotesRequested += (_, _) => EditNotes(card.Account);
         card.RemoveRequested += (_, _) => RemoveAccount(card.Account);
+    }
+
+    private void OpenBrowser()
+    {
+        BrowserWindow.Instance.Login();
+    }
+
+    private void ShowRecentMenu()
+    {
+        var menu = DarkMenu.Create();
+        var places = App.Settings.RecentPlaces ?? new List<RecentPlace>();
+        if (places.Count == 0)
+        {
+            var empty = DarkMenu.Item("No recent places yet", () => { });
+            empty.Enabled = false;
+            menu.Items.Add(empty);
+        }
+        else
+        {
+            foreach (var place in places.OrderByDescending(p => p.UsedUtc).Take(8))
+            {
+                var label = string.IsNullOrWhiteSpace(place.Name) ? $"Place {place.PlaceId}" : place.Name;
+                menu.Items.Add(DarkMenu.Item($"{label}  ·  {place.PlaceId}", () =>
+                {
+                    _place.Text = place.PlaceId.ToString();
+                    App.Toast($"{label} is now the join target.", ToastKind.Info);
+                }));
+            }
+        }
+
+        menu.Show(_recent, new Point(0, _recent.Height + 4));
+    }
+
+    private void ShowActionsMenu()
+    {
+        var menu = DarkMenu.Create();
+        menu.Items.Add(DarkMenu.Item("Select all", ToggleSelectAll));
+        menu.Items.Add(DarkMenu.Item("Clear selection", () =>
+        {
+            App.SelectedUserIds.Clear();
+            foreach (var card in _cards.Values)
+            {
+                card.Selected = false;
+            }
+
+            UpdateCounts();
+        }));
+        menu.Items.Add(DarkMenu.Separator());
+        menu.Items.Add(DarkMenu.Item("Include selected in batches", () => SetSelectedEnabled(true)));
+        menu.Items.Add(DarkMenu.Item("Mute selected", () => SetSelectedEnabled(false)));
+        menu.Items.Add(DarkMenu.Separator());
+        menu.Items.Add(DarkMenu.Item("Import cookies", () => _ = ImportCookiesAsync()));
+        menu.Items.Add(DarkMenu.Separator());
+        menu.Items.Add(DarkMenu.Item("Remove selected", () => _ = RemoveSelectedAsync(), danger: true));
+        menu.Show(_more, new Point(_more.Width - 200, _more.Height + 4));
+    }
+
+    private List<Account> SelectedAccounts(bool includeMuted = false) =>
+        App.Store.Accounts.Where(a => App.SelectedUserIds.Contains(a.UserId) && (includeMuted || a.Enabled)).ToList();
+
+    private void SetSelectedEnabled(bool enabled)
+    {
+        var targets = SelectedAccounts(includeMuted: true);
+        if (targets.Count == 0)
+        {
+            App.Toast("Select at least one account first.", ToastKind.Warning);
+            return;
+        }
+
+        App.Store.SetEnabled(targets, enabled);
+        App.NotifyAccountsChanged();
+        App.Toast(enabled ? $"{targets.Count} account(s) included in batches." : $"{targets.Count} account(s) muted.",
+            ToastKind.Success);
+    }
+
+    private async Task RemoveSelectedAsync()
+    {
+        var targets = SelectedAccounts(includeMuted: true);
+        if (targets.Count == 0)
+        {
+            App.Toast("Select at least one account first.", ToastKind.Warning);
+            return;
+        }
+
+        if (!Dialogs.Confirm(this, "Remove accounts",
+                $"Remove {targets.Count} account(s)? Their stored sessions are deleted from this machine.", "Remove"))
+        {
+            return;
+        }
+
+        foreach (var target in targets)
+        {
+            App.SelectedUserIds.Remove(target.UserId);
+        }
+
+        App.Store.RemoveMany(targets);
+        App.NotifyAccountsChanged();
+        App.Toast($"{targets.Count} account(s) removed.", ToastKind.Info);
+        await Task.CompletedTask;
+    }
+
+    private async Task RememberPlaceAsync(long placeId)
+    {
+        try
+        {
+            var info = await App.Api.GetGameInfoAsync(placeId);
+            var list = App.Settings.RecentPlaces ??= new List<RecentPlace>();
+            list.RemoveAll(place => place.PlaceId == placeId);
+            list.Insert(0, new RecentPlace
+            {
+                PlaceId = placeId,
+                Name = info?.Name ?? $"Place {placeId}",
+                UsedUtc = DateTime.UtcNow
+            });
+
+            if (list.Count > 10)
+            {
+                list.RemoveRange(10, list.Count - 10);
+            }
+
+            App.Settings.Save();
+        }
+        catch (Exception)
+        {
+            // Recent places are a convenience; a failed lookup must not disturb a launch.
+        }
     }
 
     private void CopyCookie(Account account)
@@ -267,7 +426,7 @@ internal sealed class AccountsPage : PageView
         }
         catch (Exception)
         {
-            // The clipboard can be locked by another process; nothing to recover here.
+            // The clipboard can be locked by another process.
         }
     }
 
@@ -308,7 +467,7 @@ internal sealed class AccountsPage : PageView
 
     private async Task LaunchSelectionAsync()
     {
-        var targets = App.SelectedAccounts().ToList();
+        var targets = SelectedAccounts().ToList();
         if (targets.Count == 0)
         {
             App.Toast("Select at least one account first.", ToastKind.Warning);
@@ -358,6 +517,7 @@ internal sealed class AccountsPage : PageView
                     ToastKind.Warning);
             }
 
+            _ = RememberPlaceAsync(placeId);
             await App.RefreshPresenceAsync();
         }
         catch (Exception ex)
@@ -371,12 +531,12 @@ internal sealed class AccountsPage : PageView
         }
     }
 
-    private async Task AddAccountAsync()
+    private async Task AddByCookieAsync()
     {
         var raw = Dialogs.Ask(this,
             "Add an account",
             "Paste the .ROBLOSECURITY value: DevTools → Application → Cookies → roblox.com. The cookie is validated and then encrypted locally.",
-            "Paste cookie", secret: true, okText: "Check & add");
+            "Paste cookie", secret: true, okText: "Check and add");
 
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -406,12 +566,71 @@ internal sealed class AccountsPage : PageView
             App.Avatars.Forget(user.Id);
             App.NotifyAccountsChanged();
             await App.RefreshPresenceAsync();
-            App.Toast(existed ? $"Session refreshed for {user.DisplayName}." : $"Added {user.DisplayName}.", ToastKind.Success);
+            App.Toast(existed ? $"Session refreshed for {user.DisplayName}." : $"Added {user.DisplayName}.",
+                ToastKind.Success);
         }
         catch (Exception ex)
         {
             App.Toast(ex.Message, ToastKind.Error);
         }
+    }
+
+    private async Task ImportCookiesAsync()
+    {
+        var text = Dialogs.AskMultiline(this, "Import cookies",
+            "One .ROBLOSECURITY value per line. Each session is checked with Roblox before it is stored.",
+            "Paste one cookie per line", "Import", 150);
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var added = 0;
+        var refreshed = 0;
+        var rejected = 0;
+
+        foreach (var line in lines)
+        {
+            var cookie = AccountStore.NormalizeCookie(line);
+            if (cookie is null || !seen.Add(cookie))
+            {
+                continue;
+            }
+
+            try
+            {
+                var user = await App.Api.GetAuthenticatedAsync(cookie);
+                if (user is null)
+                {
+                    rejected++;
+                    continue;
+                }
+
+                var existed = App.Store.FindByUserId(user.Id) is not null;
+                App.Store.AddOrUpdate(user, cookie);
+                App.Avatars.Forget(user.Id);
+                if (existed)
+                {
+                    refreshed++;
+                }
+                else
+                {
+                    added++;
+                }
+            }
+            catch (Exception)
+            {
+                rejected++;
+            }
+        }
+
+        App.NotifyAccountsChanged();
+        await App.RefreshPresenceAsync();
+        App.Toast($"{added} added, {refreshed} refreshed, {rejected} rejected.",
+            added + refreshed > 0 ? ToastKind.Success : ToastKind.Warning);
     }
 
     private async Task ValidateAllAsync()
@@ -486,6 +705,21 @@ internal sealed class AccountsPage : PageView
         App.Store.Save();
         App.NotifyAccountsChanged();
         App.Toast("Tag saved.", ToastKind.Success);
+    }
+
+    private void EditNotes(Account account)
+    {
+        var notes = Dialogs.AskMultiline(this, $"Notes for {account.Name}",
+            "Stored locally with the account. Never sent to Roblox.", account.Notes ?? "", "Save notes", 140);
+        if (notes is null)
+        {
+            return;
+        }
+
+        account.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        App.Store.Save();
+        App.NotifyAccountsChanged();
+        App.Toast("Notes saved.", ToastKind.Success);
     }
 
     private void RemoveAccount(Account account)

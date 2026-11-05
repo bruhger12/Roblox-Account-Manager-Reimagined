@@ -290,7 +290,7 @@ internal sealed class AccentSwatch : Control
         Theme.FillRounded(g, dot, 14, AccentColor);
         if (Selected)
         {
-            Icons.Draw(g, IconKind.Check, new RectangleF(dot.X, dot.Y, dot.Width, dot.Height), Color.White, 2f);
+            Icons.Draw(g, IconKind.Check, new RectangleF(dot.X, dot.Y, dot.Width, dot.Height), Theme.InkOn(AccentColor), 2f);
         }
     }
 }

@@ -1,4 +1,3 @@
-using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 
 namespace RamReimagined.UI;
@@ -52,7 +51,7 @@ internal sealed class AvatarCache
     }
 }
 
-/// <summary>An account row: selection, avatar, identity, presence and quick actions.</summary>
+/// <summary>An account row: selection, avatar, identity, local note, presence and quick actions.</summary>
 internal sealed class AccountCard : Control
 {
     private readonly ToolTip _tip = new() { InitialDelay = 400, AutoPopDelay = 8000 };
@@ -70,20 +69,24 @@ internal sealed class AccountCard : Control
         Account = account;
         Height = 84;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                 ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                 ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
+                 ControlStyles.Selectable, true);
         BackColor = Theme.Backdrop;
         Font = Theme.Font(9.5f);
+        TabStop = true;
 
-        _menu = new ContextMenuStrip { BackColor = Theme.Elevated, ForeColor = Theme.Text, ShowImageMargin = false };
-        _menu.Renderer = new DarkMenuRenderer();
-        _menu.Items.Add(MenuItem("Open servers", IconKind.Server, () => ServersRequested?.Invoke(this, EventArgs.Empty)));
-        _menu.Items.Add(MenuItem("Copy cookie", IconKind.Copy, () => CopyCookieRequested?.Invoke(this, EventArgs.Empty)));
-        _menu.Items.Add(MenuItem("Copy user ID", IconKind.Copy, () => CopyUserIdRequested?.Invoke(this, EventArgs.Empty)));
-        _menu.Items.Add(MenuItem(Account.Enabled ? "Mute in batch launch" : "Include in batch launch", IconKind.Check,
+        _menu = DarkMenu.Create();
+        _menu.Items.Add(DarkMenu.Item("Open in browser", () => BrowserRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(DarkMenu.Item("Open servers", () => ServersRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(DarkMenu.Item("Copy cookie", () => CopyCookieRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(DarkMenu.Item("Copy user ID", () => CopyUserIdRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(DarkMenu.Separator());
+        _menu.Items.Add(DarkMenu.Item(Account.Enabled ? "Mute in batch launch" : "Include in batch launch",
             () => ToggleEnabledRequested?.Invoke(this, EventArgs.Empty)));
-        _menu.Items.Add(MenuItem("Set tag", IconKind.Sparkle, () => TagRequested?.Invoke(this, EventArgs.Empty)));
-        _menu.Items.Add(new ToolStripSeparator());
-        _menu.Items.Add(MenuItem("Remove account", IconKind.Trash, () => RemoveRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(DarkMenu.Item("Set tag", () => TagRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(DarkMenu.Item("Edit notes", () => NotesRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(DarkMenu.Separator());
+        _menu.Items.Add(DarkMenu.Item("Remove account", () => RemoveRequested?.Invoke(this, EventArgs.Empty), danger: true));
     }
 
     public Core.Account Account { get; }
@@ -107,10 +110,12 @@ internal sealed class AccountCard : Control
     public event EventHandler? SelectedChanged;
     public event EventHandler? LaunchRequested;
     public event EventHandler? ServersRequested;
+    public event EventHandler? BrowserRequested;
     public event EventHandler? CopyCookieRequested;
     public event EventHandler? CopyUserIdRequested;
     public event EventHandler? ToggleEnabledRequested;
     public event EventHandler? TagRequested;
+    public event EventHandler? NotesRequested;
     public event EventHandler? RemoveRequested;
 
     public void SetAvatar(Image? image)
@@ -125,25 +130,14 @@ internal sealed class AccountCard : Control
         Invalidate();
     }
 
-    public void RefreshFromAccount()
-    {
-        Invalidate();
-    }
-
-    private static ToolStripMenuItem MenuItem(string text, IconKind icon, Action action)
-    {
-        var item = new ToolStripMenuItem(text) { ForeColor = Theme.Text, Padding = new Padding(4, 3, 8, 3) };
-        item.Click += (_, _) => action();
-        _ = icon;
-        return item;
-    }
+    public void RefreshFromAccount() => Invalidate();
 
     private void ComputeRects()
     {
-        var right = Width - 18;
-        _launchRect = new Rectangle(right - 92, (Height - 32) / 2, 92, 32);
-        _menuRect = new Rectangle(_launchRect.Left - 40, (Height - 32) / 2, 32, 32);
-        _checkRect = new Rectangle(18, (Height - 20) / 2, 20, 20);
+        var right = Width - 14;
+        _menuRect = new Rectangle(right - 28, (Height - 28) / 2, 28, 28);
+        _launchRect = new Rectangle(_menuRect.Left - 10 - 88, (Height - 30) / 2, 88, 30);
+        _checkRect = new Rectangle(14, (Height - 18) / 2, 18, 18);
     }
 
     protected override void OnResize(EventArgs e)
@@ -181,6 +175,7 @@ internal sealed class AccountCard : Control
         if (_checkRect.Contains(e.Location))
         {
             Selected = !Selected;
+            Focus();
         }
         else if (_launchRect.Contains(e.Location))
         {
@@ -188,14 +183,48 @@ internal sealed class AccountCard : Control
         }
         else if (_menuRect.Contains(e.Location))
         {
-            _menu.Show(this, new Point(Math.Max(0, _menuRect.Right - 180), _menuRect.Bottom + 6));
+            _menu.Show(this, new Point(Math.Max(0, _menuRect.Right - 200), _menuRect.Bottom + 6));
         }
         else
         {
             Selected = !Selected;
+            Focus();
         }
 
         base.OnMouseClick(e);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        switch (e.KeyCode)
+        {
+            case Keys.Enter:
+                e.Handled = true;
+                LaunchRequested?.Invoke(this, EventArgs.Empty);
+                return;
+            case Keys.Space:
+                e.Handled = true;
+                Selected = !Selected;
+                return;
+            case Keys.Apps:
+                e.Handled = true;
+                _menu.Show(this, new Point(_menuRect.Left, _menuRect.Bottom + 4));
+                return;
+        }
+
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnGotFocus(EventArgs e)
+    {
+        Invalidate();
+        base.OnGotFocus(e);
+    }
+
+    protected override void OnLostFocus(EventArgs e)
+    {
+        Invalidate();
+        base.OnLostFocus(e);
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -204,51 +233,85 @@ internal sealed class AccountCard : Control
         Theme.EnableQuality(g);
         var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
 
-        var background = _selected ? Theme.AccentAlpha(18) : _hover ? Theme.CardHover : Theme.Card;
-        Theme.FillRounded(g, bounds, 14, background);
-        Theme.DrawRounded(g, bounds, 14, _selected ? Theme.AccentAlpha(150) : Theme.StrokeSoft);
+        var background = _selected ? Theme.Card : _hover ? Theme.WithAlpha(Theme.CardHover, 190) : Theme.Card;
+        Theme.FillRounded(g, bounds, Theme.RadiusCard, background);
+        Theme.DrawRounded(g, bounds, Theme.RadiusCard, _selected ? Theme.Accent : Theme.StrokeSoft);
 
         DrawCheck(g);
 
-        var avatarRect = new Rectangle(48, (Height - 48) / 2, 48, 48);
+        var avatarRect = new Rectangle(42, (Height - 46) / 2, 46, 46);
         DrawAvatar(g, avatarRect);
 
-        var textLeft = 112;
-        var textRight = _menuRect.Left - 12;
-        var nameWidth = textRight - textLeft;
+        var textLeft = 100;
+        var textRight = _launchRect.Left - 14;
+        var nameWidth = Math.Max(40, textRight - textLeft);
 
-        var nameFont = Theme.Font(10.5f, FontStyle.Bold);
-        Theme.DrawText(g, Account.Name, nameFont, Theme.Text,
-            new Rectangle(textLeft, 20, Math.Max(40, nameWidth), 20),
+        var nameFont = Theme.Font(10.8f, FontStyle.Bold);
+        Theme.DrawText(g, Account.Name, nameFont, Account.Enabled ? Theme.Text : Theme.Muted,
+            new Rectangle(textLeft, 13, nameWidth, 20),
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
-        var handle = string.IsNullOrWhiteSpace(Account.Username) ? $"ID {Account.UserId}" : $"@{Account.Username}";
-        var tagSuffix = string.IsNullOrWhiteSpace(Account.Tag) ? "" : $"  ·  {Account.Tag}";
-        var smallFont = Theme.Font(8.75f);
-        Theme.DrawText(g, $"{handle}  ·  {Account.UserId}{tagSuffix}", smallFont, Theme.Muted,
-            new Rectangle(textLeft, 41, Math.Max(40, nameWidth), 18),
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        DrawIdentityLine(g, textLeft, 33, nameWidth);
+
+        var noteFont = Theme.Font(8.9f);
+        if (!string.IsNullOrWhiteSpace(Account.Notes))
+        {
+            Theme.DrawText(g, Account.Notes.Replace('\n', ' '), noteFont, Theme.Muted,
+                new Rectangle(textLeft, 51, nameWidth, 18),
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+        else if (!string.IsNullOrWhiteSpace(Account.Tag))
+        {
+            Theme.DrawText(g, Account.Tag.ToUpperInvariant(), Theme.Mono(9f), Theme.Faint,
+                new Rectangle(textLeft, 51, nameWidth, 18),
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+        else if (!Account.Enabled)
+        {
+            Theme.DrawText(g, "Muted for batches", noteFont, Theme.Faint,
+                new Rectangle(textLeft, 51, nameWidth, 18),
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
 
         DrawPresence(g);
         DrawLaunch(g);
         DrawMenu(g);
+
+        if (Focused)
+        {
+            Theme.DrawFocus(g, bounds, Theme.RadiusCard);
+        }
+    }
+
+    private void DrawIdentityLine(Graphics g, int left, int y, int width)
+    {
+        var handle = string.IsNullOrWhiteSpace(Account.Username) ? "" : $"@{Account.Username}";
+        var handleFont = Theme.Font(9f);
+        var handleWidth = string.IsNullOrWhiteSpace(handle) ? 0 : TextRenderer.MeasureText(handle, handleFont).Width;
+        Theme.DrawText(g, handle, handleFont, Theme.Muted, new Rectangle(left, y, Math.Max(10, width), 17),
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+
+        var idText = Account.UserId > 0 ? Account.UserId.ToString() : "no id";
+        Theme.DrawText(g, idText, Theme.Mono(9f), Theme.Faint,
+            new Rectangle(left + handleWidth + 8, y, Math.Max(10, width - handleWidth - 8), 17),
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private void DrawCheck(Graphics g)
     {
-        var on = _selected;
-        Theme.FillRounded(g, _checkRect, 6, on ? Theme.Accent : Theme.WithAlpha(Theme.Elevated, 220));
-        Theme.DrawRounded(g, _checkRect, 6, on ? Theme.Accent : Theme.Stroke);
-        if (on)
+        Theme.FillRounded(g, _checkRect, 5, _selected ? Theme.Accent : Theme.Card);
+        Theme.DrawRounded(g, _checkRect, 5, _selected ? Theme.Accent : Theme.Stroke);
+        if (_selected)
         {
-            Icons.Draw(g, IconKind.Check, new RectangleF(_checkRect.X, _checkRect.Y, _checkRect.Width, _checkRect.Height),
-                Color.White, 2.1f);
+            Icons.Draw(g, IconKind.Check,
+                new RectangleF(_checkRect.X + 1, _checkRect.Y + 1, _checkRect.Width - 2, _checkRect.Height - 2),
+                Theme.InkOn(Theme.Accent), 2.1f);
         }
     }
 
     private void DrawAvatar(Graphics g, Rectangle rect)
     {
-        using var path = Theme.RoundedRect(rect, 14);
+        using var path = Theme.RoundedRect(rect, 8);
         if (_avatar is not null)
         {
             var state = g.Save();
@@ -258,30 +321,25 @@ internal sealed class AccountCard : Control
         }
         else
         {
-            using var gradient = new LinearGradientBrush(rect, Theme.AccentAlpha(150), Theme.AccentAlpha(60), 45f);
-            g.FillPath(gradient, path);
-            var font = Theme.Font(14f, FontStyle.Bold);
-            Theme.DrawText(g, Account.Initials, font, Color.White, rect,
+            using var brush = new SolidBrush(Theme.Elevated);
+            g.FillPath(brush, path);
+            Theme.DrawText(g, Account.Initials, Theme.Font(13f, FontStyle.Bold), Theme.Text, rect,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
 
-        // Presence ring
         var color = PresenceColor();
         if (color != Color.Empty)
         {
-            using var ring = new Pen(Theme.Backdrop, 3f);
-            using var path2 = Theme.RoundedRect(new Rectangle(rect.X - 2, rect.Y - 2, rect.Width + 4, rect.Height + 4), 16);
-            g.DrawPath(ring, path2);
-            Theme.FillRounded(g, new Rectangle(rect.Right - 12, rect.Bottom - 12, 16, 16), 8, Theme.Backdrop);
-            Theme.FillRounded(g, new Rectangle(rect.Right - 10, rect.Bottom - 10, 12, 12), 6, color);
+            Theme.FillRounded(g, new Rectangle(rect.Right - 12, rect.Bottom - 12, 12, 12), 6, Theme.Backdrop);
+            Theme.FillRounded(g, new Rectangle(rect.Right - 10, rect.Bottom - 10, 8, 8), 4, color);
         }
     }
 
     private Color PresenceColor() => _presence?.Type switch
     {
         2 => Theme.Success,
-        1 => Color.FromArgb(86, 180, 240),
-        3 => Color.FromArgb(190, 140, 255),
+        1 => Color.FromArgb(126, 158, 184),
+        3 => Theme.Warning,
         _ => Color.Empty
     };
 
@@ -290,35 +348,42 @@ internal sealed class AccountCard : Control
         var state = _presence;
         var text = state is null ? "Checking" : state.State;
         var color = state is null ? Theme.Faint : PresenceColor() is var c && c != Color.Empty ? c : Theme.Faint;
+        var font = Theme.Font(8.9f);
+        var width = TextRenderer.MeasureText(text, font).Width + 16;
+        var rect = new Rectangle(_launchRect.Left - 12 - width, (Height - 22) / 2, width, 22);
 
-        var width = TextRenderer.MeasureText(text, Theme.Font(8.5f, FontStyle.Bold)).Width + 30;
-        var rect = new Rectangle(_menuRect.Left - width - 12, (Height - 26) / 2, width, 26);
-        Theme.FillRounded(g, rect, 13, Theme.WithAlpha(color, 26));
-        Theme.DrawRounded(g, rect, 13, Theme.WithAlpha(color, 60));
-        Theme.FillRounded(g, new Rectangle(rect.X + 10, rect.Y + 11, 5, 5), 3, color);
-        var font = Theme.Font(8.5f, FontStyle.Bold);
-        Theme.DrawText(g, text, font, color, new Rectangle(rect.X + 20, rect.Y, rect.Width - 26, rect.Height));
+        Theme.FillRounded(g, new Rectangle(rect.X, rect.Y + 8, 5, 5), 3, color);
+        Theme.DrawText(g, text, font, color, new Rectangle(rect.X + 11, rect.Y, rect.Width - 11, rect.Height));
 
         if (state is not null)
         {
-            _tip.SetToolTip(this, $"{state.State} — {state.Detail}");
+            _tip.SetToolTip(this, $"{state.State} · {state.Detail}");
+        }
+        else
+        {
+            _tip.SetToolTip(this, "");
         }
     }
 
     private void DrawLaunch(Graphics g)
     {
-        var enabled = _hover;
-        Theme.FillRounded(g, _launchRect, 9, enabled ? Theme.Accent : Theme.AccentAlpha(200));
-        Icons.Draw(g, IconKind.Play, new RectangleF(_launchRect.X + 12, _launchRect.Y + 9, 14, 14), Color.White, 1.6f);
-        var font = Theme.Font(8.75f, FontStyle.Bold);
-        Theme.DrawText(g, "Launch", font, Color.White, new Rectangle(_launchRect.X + 30, _launchRect.Y, _launchRect.Width - 34, _launchRect.Height),
+        Theme.FillRounded(g, _launchRect, Theme.RadiusControl, _hover ? Theme.Elevated : Theme.WithAlpha(Theme.Elevated, 150));
+        Theme.DrawRounded(g, _launchRect, Theme.RadiusControl, _hover ? Theme.Stroke : Theme.StrokeSoft);
+        Icons.Draw(g, IconKind.Play, new RectangleF(_launchRect.X + 11, _launchRect.Y + 8, 13, 13), Theme.Text, 1.5f);
+        Theme.DrawText(g, "Launch", Theme.Font(9f, FontStyle.Bold), Theme.Text,
+            new Rectangle(_launchRect.X + 28, _launchRect.Y, _launchRect.Width - 32, _launchRect.Height),
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
     }
 
     private void DrawMenu(Graphics g)
     {
-        Theme.FillRounded(g, _menuRect, 9, Theme.WithAlpha(Theme.Elevated, _hover ? 230 : 150));
-        Icons.Draw(g, IconKind.More, new RectangleF(_menuRect.X + 6, _menuRect.Y + 6, 20, 20), Theme.Muted, 1.4f);
+        if (_hover || _menu.Visible)
+        {
+            Theme.FillRounded(g, _menuRect, Theme.RadiusControl, Theme.Elevated);
+        }
+
+        Icons.Draw(g, IconKind.More, new RectangleF(_menuRect.X + 4, _menuRect.Y + 4, 20, 20),
+            _hover ? Theme.Text : Theme.Muted, 1.4f);
     }
 
     protected override void Dispose(bool disposing)
@@ -330,37 +395,5 @@ internal sealed class AccountCard : Control
         }
 
         base.Dispose(disposing);
-    }
-
-    private sealed class DarkMenuRenderer : ToolStripProfessionalRenderer
-    {
-        public DarkMenuRenderer() : base(new DarkColors())
-        {
-            RoundedEdges = false;
-        }
-
-        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
-        {
-            e.TextColor = e.Item?.ForeColor ?? Theme.Text;
-            base.OnRenderItemText(e);
-        }
-
-        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
-        {
-            using var pen = new Pen(Theme.Stroke);
-            e.Graphics.DrawRectangle(pen, 0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1);
-        }
-
-        private sealed class DarkColors : ProfessionalColorTable
-        {
-            public override Color ToolStripDropDownBackground => Theme.Elevated;
-            public override Color ImageMarginGradientBegin => Theme.Elevated;
-            public override Color ImageMarginGradientMiddle => Theme.Elevated;
-            public override Color ImageMarginGradientEnd => Theme.Elevated;
-            public override Color MenuItemSelected => Theme.CardHover;
-            public override Color MenuItemBorder => Theme.Stroke;
-            public override Color SeparatorDark => Theme.Stroke;
-            public override Color SeparatorLight => Theme.Elevated;
-        }
     }
 }

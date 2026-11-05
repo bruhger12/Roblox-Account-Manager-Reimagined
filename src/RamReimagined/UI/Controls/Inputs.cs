@@ -1,6 +1,6 @@
 namespace RamReimagined.UI;
 
-/// <summary>iOS-style switch used for boolean settings.</summary>
+/// <summary>Flat switch: filled bone when on, hairline track when off.</summary>
 internal sealed class ToggleSwitch : Control
 {
     private bool _checked;
@@ -10,10 +10,11 @@ internal sealed class ToggleSwitch : Control
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                  ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
-                 ControlStyles.SupportsTransparentBackColor, true);
+                 ControlStyles.SupportsTransparentBackColor | ControlStyles.Selectable, true);
         BackColor = Color.Transparent;
-        Size = new Size(44, 24);
+        Size = new Size(42, 24);
         Cursor = Cursors.Hand;
+        TabStop = true;
     }
 
     public bool Checked
@@ -54,31 +55,56 @@ internal sealed class ToggleSwitch : Control
         base.OnMouseClick(e);
     }
 
+    protected override void OnGotFocus(EventArgs e)
+    {
+        Invalidate();
+        base.OnGotFocus(e);
+    }
+
+    protected override void OnLostFocus(EventArgs e)
+    {
+        Invalidate();
+        base.OnLostFocus(e);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode is Keys.Space or Keys.Enter)
+        {
+            e.Handled = true;
+            Checked = !Checked;
+            return;
+        }
+
+        base.OnKeyDown(e);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
         Theme.EnableQuality(g);
-        var track = new Rectangle(0, (Height - 24) / 2, 44, 24);
+        var track = new Rectangle(0, (Height - 24) / 2, 42, 24);
         var on = _checked;
-        Theme.FillRounded(g, track, 12, on
-            ? Theme.Accent
-            : _hover ? Theme.Stroke : Color.FromArgb(40, 49, 64));
 
-        if (!on)
+        Theme.FillRounded(g, track, 12, on ? Theme.Text : _hover ? Theme.Elevated : Theme.Card);
+        Theme.DrawRounded(g, track, 12, on ? Theme.Text : Theme.Stroke);
+
+        var knob = new Rectangle(on ? 21 : 3, track.Y + 3, 18, 18);
+        Theme.FillRounded(g, knob, 9, on ? Theme.Backdrop : Theme.Muted);
+
+        if (Focused)
         {
-            Theme.DrawRounded(g, track, 12, Theme.StrokeSoft);
+            Theme.DrawFocus(g, new Rectangle(0, 0, Width - 1, Height - 1), 12);
         }
-
-        var knob = new Rectangle(on ? 22 : 3, track.Y + 3, 18, 18);
-        Theme.FillRounded(g, knob, 9, on ? Color.White : Color.FromArgb(180, 190, 205));
     }
 }
 
-/// <summary>Rounded single-line text input with placeholder support.</summary>
+/// <summary>Flat text input with placeholder, optional multiline body and a visible focus rule.</summary>
 internal sealed class TextField : Control
 {
     private readonly TextBox _box;
     private bool _hover;
+    private bool _multiline;
 
     public TextField(string placeholder = "")
     {
@@ -89,12 +115,11 @@ internal sealed class TextField : Control
         Placeholder = placeholder;
         Cursor = Cursors.IBeam;
 
-        // The inner TextBox must exist before any resize/layout runs, because
-        // OnLayout positions it.
+        // The inner TextBox must exist before any resize/layout runs, because OnLayout positions it.
         _box = new TextBox
         {
             BorderStyle = BorderStyle.None,
-            BackColor = Theme.Elevated,
+            BackColor = Theme.Card,
             ForeColor = Theme.Text,
             Font = Theme.Font(9.75f),
             AutoSize = false,
@@ -124,6 +149,26 @@ internal sealed class TextField : Control
         set => _box.UseSystemPasswordChar = value;
     }
 
+    public bool Multiline
+    {
+        get => _multiline;
+        set
+        {
+            if (_multiline == value)
+            {
+                return;
+            }
+
+            _multiline = value;
+            _box.Multiline = value;
+            _box.AcceptsReturn = value;
+            _box.ScrollBars = value ? ScrollBars.Vertical : ScrollBars.None;
+            _box.WordWrap = value;
+            PerformLayout();
+            Invalidate();
+        }
+    }
+
     public void FocusInput() => _box.Focus();
 
     protected override void OnLayout(LayoutEventArgs e)
@@ -134,8 +179,16 @@ internal sealed class TextField : Control
             return;
         }
 
-        _box.Bounds = new Rectangle(14, Math.Max(9, (Height - _box.PreferredHeight) / 2), Math.Max(10, Width - 28), _box.PreferredHeight);
         _box.BackColor = Theme.Card;
+        if (_multiline)
+        {
+            _box.Bounds = new Rectangle(12, 10, Math.Max(10, Width - 24), Math.Max(20, Height - 20));
+        }
+        else
+        {
+            _box.Bounds = new Rectangle(12, Math.Max(9, (Height - _box.PreferredHeight) / 2), Math.Max(10, Width - 24),
+                _box.PreferredHeight);
+        }
     }
 
     protected override void OnMouseEnter(EventArgs e)
@@ -162,13 +215,20 @@ internal sealed class TextField : Control
     {
         var g = e.Graphics;
         Theme.EnableQuality(g);
-        var bounds = new Rectangle(0, 0, Width, Height);
-        Theme.FillRounded(g, bounds, 10, Theme.Card);
-        Theme.DrawRounded(g, bounds, 10, _box.Focused ? Theme.AccentAlpha(170) : _hover ? Theme.Stroke : Theme.StrokeSoft);
+        var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
+        Theme.FillRounded(g, bounds, Theme.RadiusControl, Theme.Card);
+        Theme.DrawRounded(g, bounds, Theme.RadiusControl,
+            _box.Focused ? Theme.Accent : _hover ? Theme.Stroke : Theme.StrokeSoft);
 
         if (string.IsNullOrEmpty(_box.Text) && !_box.Focused)
         {
-            Theme.DrawText(g, Placeholder, Theme.Font(9.5f), Theme.Faint, new Rectangle(15, 0, Width - 28, Height));
+            var flags = _multiline
+                ? TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak
+                : TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis;
+            var placeholderBounds = _multiline
+                ? new Rectangle(13, 11, Width - 26, Height - 20)
+                : new Rectangle(13, 0, Width - 26, Height);
+            Theme.DrawText(g, Placeholder, Theme.Font(9.5f), Theme.Faint, placeholderBounds, flags);
         }
     }
 }
@@ -181,15 +241,10 @@ internal sealed class StackPanel : Panel
         DoubleBuffered = true;
         AutoScroll = true;
         BackColor = Color.Transparent;
-        Padding = new Padding(0, 0, 8, 0);
+        Padding = new Padding(0, 0, 10, 0);
     }
 
     public int Gap { get; set; } = 10;
-
-    public override void Refresh()
-    {
-        base.Refresh();
-    }
 
     public void Relayout()
     {
@@ -201,9 +256,11 @@ internal sealed class StackPanel : Panel
                 continue;
             }
 
-            child.SetBounds(0, y, Math.Max(120, ClientSize.Width - Gap), child.Height);
+            child.SetBounds(0, y, Math.Max(120, ClientSize.Width - Padding.Right), child.Height);
             y += child.Height + Gap;
         }
+
+        AutoScrollMinSize = new Size(0, y);
     }
 
     protected override void OnResize(EventArgs eventargs)
@@ -213,12 +270,9 @@ internal sealed class StackPanel : Panel
         Invalidate();
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    protected override void OnControlAdded(ControlEventArgs e)
     {
-        var g = e.Graphics;
-        Theme.EnableQuality(g);
-        using var brush = new SolidBrush(Color.FromArgb(18, 22, 31));
-        g.FillRectangle(brush, new Rectangle(ClientSize.Width - 6, 0, 6, ClientSize.Height));
-        base.OnPaint(e);
+        base.OnControlAdded(e);
+        Relayout();
     }
 }

@@ -3,32 +3,46 @@ using System.Drawing.Text;
 
 namespace RamReimagined.UI;
 
+/// <summary>
+/// Design tokens taken from the vault's operative rules: one near-black ground,
+/// one bone ink, one accent, no decorative gradients, hairline separation, and a
+/// grotesque for words with a mono reserved for measured values.
+/// </summary>
 internal static class Theme
 {
-    public static Color Backdrop { get; } = Color.FromArgb(9, 11, 16);
-    public static Color Rail { get; } = Color.FromArgb(13, 17, 24);
-    public static Color Panel { get; } = Color.FromArgb(17, 22, 31);
-    public static Color Card { get; } = Color.FromArgb(20, 26, 37);
-    public static Color CardHover { get; } = Color.FromArgb(26, 33, 46);
-    public static Color Elevated { get; } = Color.FromArgb(24, 31, 43);
-    public static Color Stroke { get; } = Color.FromArgb(34, 42, 57);
-    public static Color StrokeSoft { get; } = Color.FromArgb(27, 34, 46);
-    public static Color Text { get; } = Color.FromArgb(233, 236, 245);
-    public static Color Muted { get; } = Color.FromArgb(140, 150, 170);
-    public static Color Faint { get; } = Color.FromArgb(96, 106, 126);
-    public static Color Success { get; } = Color.FromArgb(46, 213, 168);
-    public static Color Warning { get; } = Color.FromArgb(255, 184, 76);
-    public static Color Danger { get; } = Color.FromArgb(255, 94, 120);
+    public static Color Backdrop { get; } = Color.FromArgb(8, 8, 10);
+    public static Color Rail { get; } = Color.FromArgb(11, 11, 14);
+    public static Color Panel { get; } = Color.FromArgb(15, 15, 18);
+    public static Color Card { get; } = Color.FromArgb(17, 17, 21);
+    public static Color CardHover { get; } = Color.FromArgb(24, 24, 29);
+    public static Color Elevated { get; } = Color.FromArgb(29, 29, 35);
+    public static Color Stroke { get; } = Color.FromArgb(43, 43, 50);
+    public static Color StrokeSoft { get; } = Color.FromArgb(30, 30, 36);
 
-    public static Color Accent { get; private set; } = Color.FromArgb(124, 96, 255);
+    // Bone ink from the vault's best-rated reference, not pure white.
+    public static Color Text { get; } = Color.FromArgb(233, 230, 224);
+    public static Color Muted { get; } = Color.FromArgb(168, 164, 156);
+    public static Color Faint { get; } = Color.FromArgb(138, 134, 126);
 
+    // Status colours are information, not decoration.
+    public static Color Success { get; } = Color.FromArgb(111, 176, 123);
+    public static Color Warning { get; } = Color.FromArgb(214, 162, 75);
+    public static Color Danger { get; } = Color.FromArgb(210, 104, 92);
+
+    public const int RadiusWindow = 12;
+    public const int RadiusCard = 10;
+    public const int RadiusControl = 8;
+
+    public static Color Accent { get; private set; } = Color.FromArgb(194, 121, 91);
+
+    /// <summary>One accent at a time. The default is a warm clay, not the generated violet-blue.</summary>
     public static readonly (string Name, Color Color)[] Accents =
     {
-        ("Violet", Color.FromArgb(124, 96, 255)),
-        ("Cyan", Color.FromArgb(56, 189, 248)),
-        ("Emerald", Color.FromArgb(52, 211, 153)),
-        ("Magenta", Color.FromArgb(232, 96, 214)),
-        ("Amber", Color.FromArgb(251, 176, 64))
+        ("Ember", Color.FromArgb(194, 121, 91)),
+        ("Sage", Color.FromArgb(126, 154, 120)),
+        ("Tide", Color.FromArgb(94, 140, 150)),
+        ("Plum", Color.FromArgb(144, 121, 166)),
+        ("Bone", Color.FromArgb(201, 197, 188))
     };
 
     public static void SetAccent(string? name)
@@ -39,26 +53,80 @@ internal static class Theme
 
     public static Color AccentAlpha(int alpha) => Color.FromArgb(alpha, Accent);
 
-    private static readonly Dictionary<(float Size, FontStyle Style), Font> FontCache = new();
-
-    public static Font Font(float size, FontStyle style = FontStyle.Regular)
+    /// <summary>Ink that stays readable on a given fill (used by swatches and the primary button).</summary>
+    public static Color InkOn(Color color)
     {
-        var key = (size, style);
-        if (!FontCache.TryGetValue(key, out var font))
-        {
-            font = new Font("Segoe UI", size, style, GraphicsUnit.Point);
-            FontCache[key] = font;
-        }
-
-        return font;
+        var luminance = (0.299 * color.R + 0.587 * color.G + 0.114 * color.B) / 255.0;
+        return luminance > 0.6 ? Backdrop : Color.FromArgb(250, 249, 246);
     }
 
-    public static Font FontDisplay(float size, FontStyle style = FontStyle.Bold)
+    private static readonly Lazy<string[]> InstalledFamilies = new(() =>
     {
-        var key = (size + 100, style);
+        try
+        {
+            return FontFamily.Families.Select(family => family.Name).ToArray();
+        }
+        catch (Exception)
+        {
+            return Array.Empty<string>();
+        }
+    });
+
+    private static string Pick(params string[] names)
+    {
+        var installed = InstalledFamilies.Value;
+        foreach (var name in names)
+        {
+            if (installed.Any(family => family.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return name;
+            }
+        }
+
+        return names[^1];
+    }
+
+    public static readonly string UiFamily = Pick("Segoe UI Variable Text", "Segoe UI", "Arial");
+    public static readonly string DisplayFamily = Pick("Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", "Arial");
+    public static readonly string MonoFamily = Pick("Cascadia Mono", "Consolas", "Courier New");
+
+    private static readonly Dictionary<(int Family, float Size, FontStyle Style), Font> FontCache = new();
+
+    /// <summary>
+    /// Existing call sites ask for 7.5 to 19 pt. Functional text under 11 px was the
+    /// worst offender in the first build, so every request is mapped onto one
+    /// legible scale instead of being trusted as written.
+    /// </summary>
+    private static float Legible(float size) => size switch
+    {
+        <= 8.9f => 11f,
+        <= 9.5f => 11.5f,
+        <= 10.2f => 12f,
+        <= 11f => 12.5f,
+        <= 12.2f => 13f,
+        <= 13.5f => 14f,
+        <= 15f => 15.5f,
+        <= 16.5f => 17f,
+        <= 18f => 19f,
+        _ => size
+    };
+
+    public static Font Font(float size, FontStyle style = FontStyle.Regular) =>
+        GetFont(0, UiFamily, Legible(size), style);
+
+    public static Font FontDisplay(float size, FontStyle style = FontStyle.Bold) =>
+        GetFont(1, DisplayFamily, Legible(size), style);
+
+    /// <summary>Mono is only for measured values: user IDs, job IDs, ping, FPS, counts, versions.</summary>
+    public static Font Mono(float size, FontStyle style = FontStyle.Regular) =>
+        GetFont(2, MonoFamily, Math.Max(10f, size), style);
+
+    private static Font GetFont(int familyIndex, string family, float size, FontStyle style)
+    {
+        var key = (familyIndex, size, style);
         if (!FontCache.TryGetValue(key, out var font))
         {
-            font = new Font("Segoe UI Variable Display", size, style, GraphicsUnit.Point);
+            font = new Font(family, size, style, GraphicsUnit.Point);
             FontCache[key] = font;
         }
 
@@ -103,11 +171,32 @@ internal static class Theme
         g.DrawPath(pen, path);
     }
 
+    /// <summary>Kept for compatibility; new surfaces separate by tone and hairline instead.</summary>
     public static void FillGradient(Graphics g, Rectangle bounds, int radius, Color from, Color to, float angle = 35f)
     {
         using var path = RoundedRect(bounds, radius);
         using var brush = new LinearGradientBrush(bounds, from, to, angle);
         g.FillPath(brush, path);
+    }
+
+    public static void DrawHairline(Graphics g, int x, int y, int width)
+    {
+        using var pen = new Pen(StrokeSoft);
+        g.DrawLine(pen, x, y, x + width, y);
+    }
+
+    /// <summary>Visible keyboard focus, drawn by every custom control.</summary>
+    public static void DrawFocus(Graphics g, Rectangle bounds, int radius)
+    {
+        if (bounds.Width < 10 || bounds.Height < 10)
+        {
+            return;
+        }
+
+        using var path = RoundedRect(new Rectangle(bounds.X + 2, bounds.Y + 2, bounds.Width - 5, bounds.Height - 5),
+            Math.Max(3, radius - 2));
+        using var pen = new Pen(Accent, 1.6f) { DashStyle = DashStyle.Solid };
+        g.DrawPath(pen, path);
     }
 
     public static void DrawText(Graphics g, string text, Font font, Color color, Rectangle bounds,

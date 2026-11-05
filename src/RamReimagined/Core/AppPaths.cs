@@ -22,6 +22,15 @@ public static class AppPaths
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Roblox");
 }
 
+public sealed class RecentPlace
+{
+    public long PlaceId { get; set; }
+
+    public string Name { get; set; } = "";
+
+    public DateTime UsedUtc { get; set; } = DateTime.UtcNow;
+}
+
 public sealed class AppSettings
 {
     public long DefaultPlaceId { get; set; }
@@ -38,7 +47,9 @@ public sealed class AppSettings
 
     public bool ConfirmBatchLaunch { get; set; } = true;
 
-    public string AccentName { get; set; } = "Violet";
+    public string AccentName { get; set; } = "Ember";
+
+    public List<RecentPlace> RecentPlaces { get; set; } = new();
 
     public int ServerPageSize { get; set; } = 100;
 

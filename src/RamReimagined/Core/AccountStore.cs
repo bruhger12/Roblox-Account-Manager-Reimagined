@@ -22,6 +22,9 @@ public sealed class Account
 
     public string? Tag { get; set; }
 
+    /// <summary>Local-only note shown on the account card. Never sent to Roblox.</summary>
+    public string? Notes { get; set; }
+
     public bool Enabled { get; set; } = true;
 
     [JsonIgnore]

@@ -11,10 +11,12 @@ internal sealed class ServerRow : Control
     public ServerRow(PublicServer server)
     {
         Server = server;
-        Height = 58;
+        Height = 54;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                 ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                 ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
+                 ControlStyles.Selectable, true);
         BackColor = Theme.Backdrop;
+        TabStop = true;
     }
 
     public PublicServer Server { get; }
@@ -23,7 +25,7 @@ internal sealed class ServerRow : Control
 
     private void ComputeRects()
     {
-        _joinRect = new Rectangle(Width - 18 - 84, (Height - 32) / 2, 84, 32);
+        _joinRect = new Rectangle(Width - 16 - 76, (Height - 30) / 2, 76, 30);
     }
 
     protected override void OnResize(EventArgs e)
@@ -56,6 +58,7 @@ internal sealed class ServerRow : Control
     protected override void OnMouseClick(MouseEventArgs e)
     {
         ComputeRects();
+        Focus();
         if (_joinRect.Contains(e.Location))
         {
             JoinRequested?.Invoke(this, EventArgs.Empty);
@@ -64,37 +67,69 @@ internal sealed class ServerRow : Control
         base.OnMouseClick(e);
     }
 
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode is Keys.Enter or Keys.Space)
+        {
+            e.Handled = true;
+            JoinRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnGotFocus(EventArgs e)
+    {
+        Invalidate();
+        base.OnGotFocus(e);
+    }
+
+    protected override void OnLostFocus(EventArgs e)
+    {
+        Invalidate();
+        base.OnLostFocus(e);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
         Theme.EnableQuality(g);
         ComputeRects();
 
-        var bounds = new Rectangle(0, 1, Width - 1, Height - 3);
-        Theme.FillRounded(g, bounds, 12, _hover ? Theme.CardHover : Theme.Card);
-        Theme.DrawRounded(g, bounds, 12, Theme.StrokeSoft);
+        if (_hover)
+        {
+            Theme.FillRounded(g, new Rectangle(0, 1, Width - 1, Height - 3), Theme.RadiusControl, Theme.Card);
+        }
 
-        var font = Theme.Font(9f);
-        Theme.DrawText(g, Server.Id, font, Theme.Text, new Rectangle(18, 0, 210, Height),
+        Theme.DrawHairline(g, 16, Height - 2, Width - 32);
+
+        Theme.DrawText(g, Server.Id, Theme.Mono(10f), Theme.Text, new Rectangle(16, 0, 206, Height),
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
-        // Population bar
-        var barBounds = new Rectangle(236, (Height - 6) / 2 + 8, 150, 5);
-        Theme.FillRounded(g, barBounds, 3, Theme.WithAlpha(Theme.Stroke, 200));
-        var fill = Math.Max(3, (int)(barBounds.Width * Server.Fill));
-        Theme.FillRounded(g, new Rectangle(barBounds.X, barBounds.Y, fill, barBounds.Height), 3,
-            Server.Fill > 0.85 ? Theme.Warning : Theme.Success);
-        Theme.DrawText(g, $"{Server.Playing}/{Server.MaxPlayers}", font, Theme.Muted, new Rectangle(236, 10, 150, 20));
+        var barBounds = new Rectangle(236, (Height - 6) / 2 + 8, 142, 4);
+        Theme.FillRounded(g, barBounds, 2, Theme.Stroke);
+        var fill = Math.Max(2, (int)(barBounds.Width * Server.Fill));
+        Theme.FillRounded(g, new Rectangle(barBounds.X, barBounds.Y, fill, barBounds.Height), 2,
+            Server.Fill > 0.85 ? Theme.Warning : Theme.Muted);
+        Theme.DrawText(g, $"{Server.Playing}/{Server.MaxPlayers}", Theme.Mono(10f), Theme.Muted,
+            new Rectangle(236, 8, 150, 20));
 
-        // Network
         var pingColor = Server.Ping <= 0 ? Theme.Faint : Server.Ping < 80 ? Theme.Success : Server.Ping < 160 ? Theme.Warning : Theme.Danger;
-        Theme.DrawText(g, Server.Ping <= 0 ? "—" : $"{Server.Ping} ms", font, pingColor, new Rectangle(400, 0, 80, Height));
-        Theme.DrawText(g, Server.Fps <= 0 ? "—" : $"{Server.Fps:0} fps", font, Theme.Muted, new Rectangle(482, 0, 80, Height));
+        Theme.DrawText(g, Server.Ping <= 0 ? "n/a" : $"{Server.Ping} ms", Theme.Mono(10f), pingColor,
+            new Rectangle(398, 0, 78, Height));
+        Theme.DrawText(g, Server.Fps <= 0 ? "n/a" : $"{Server.Fps:0} fps", Theme.Mono(10f), Theme.Muted,
+            new Rectangle(478, 0, 78, Height));
 
-        Theme.FillRounded(g, _joinRect, 9, _hover ? Theme.Accent : Theme.AccentAlpha(190));
-        var label = Theme.Font(8.75f, FontStyle.Bold);
-        Theme.DrawText(g, "Join", label, Color.White, _joinRect,
+        Theme.FillRounded(g, _joinRect, Theme.RadiusControl, _hover ? Theme.Elevated : Theme.Card);
+        Theme.DrawRounded(g, _joinRect, Theme.RadiusControl, _hover ? Theme.Stroke : Theme.StrokeSoft);
+        Theme.DrawText(g, "Join", Theme.Font(9f, FontStyle.Bold), Theme.Text, _joinRect,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+
+        if (Focused)
+        {
+            Theme.DrawFocus(g, new Rectangle(0, 1, Width - 1, Height - 3), Theme.RadiusControl);
+        }
     }
 }
 
@@ -113,10 +148,11 @@ internal sealed class ServerTableHeader : Control
     {
         var g = e.Graphics;
         Theme.EnableQuality(g);
-        var font = Theme.Font(8.25f, FontStyle.Bold);
-        Theme.DrawText(g, "JOB ID", font, Theme.Faint, new Rectangle(18, 0, 200, Height));
+        var font = Theme.Mono(9f);
+        Theme.DrawText(g, "JOB ID", font, Theme.Faint, new Rectangle(16, 0, 200, Height));
         Theme.DrawText(g, "PLAYERS", font, Theme.Faint, new Rectangle(236, 0, 150, Height));
-        Theme.DrawText(g, "PING", font, Theme.Faint, new Rectangle(400, 0, 70, Height));
-        Theme.DrawText(g, "FPS", font, Theme.Faint, new Rectangle(482, 0, 70, Height));
+        Theme.DrawText(g, "PING", font, Theme.Faint, new Rectangle(398, 0, 70, Height));
+        Theme.DrawText(g, "FPS", font, Theme.Faint, new Rectangle(478, 0, 70, Height));
+        Theme.DrawHairline(g, 16, Height - 2, 900);
     }
 }

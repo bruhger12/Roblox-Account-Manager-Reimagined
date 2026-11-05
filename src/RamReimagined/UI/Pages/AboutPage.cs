@@ -13,7 +13,10 @@ internal sealed class AboutPage : PageView
         mark.Paint += (_, e) =>
         {
             Theme.EnableQuality(e.Graphics);
-            Theme.FillGradient(e.Graphics, new Rectangle(0, 0, 43, 43), 13, Theme.Accent, Color.FromArgb(64, 44, 168));
+            Theme.FillRounded(e.Graphics, new Rectangle(0, 0, 43, 43), Theme.RadiusCard, Theme.Text);
+            Theme.DrawText(e.Graphics, "R", Theme.Font(16f, FontStyle.Bold), Theme.Backdrop,
+                new Rectangle(0, 0, 44, 44),
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         };
         card.Controls.Add(mark);
 
@@ -28,7 +31,7 @@ internal sealed class AboutPage : PageView
         };
         card.Controls.Add(name);
 
-        card.Controls.Add(new MutedLabel("A modern rebuild of ic3w0lf22's account manager · v1.0.0 · GPL-3.0", 9f)
+        card.Controls.Add(new MutedLabel("A modern rebuild of ic3w0lf22's account manager · v1.1.0 · GPL-3.0", 9f)
         {
             Bounds = new Rectangle(84, 52, 620, 20)
         });
@@ -38,7 +41,8 @@ internal sealed class AboutPage : PageView
             Text = string.Join(Environment.NewLine, new[]
             {
                 "Sessions are encrypted with Windows DPAPI for the signed-in Windows user only. Cookies never leave this machine,",
-                "and no password is ever asked for: accounts are added from an existing browser session.",
+                "and no password is ever asked for: the sign-in browser adds the account from the session it creates, then clears",
+                "its cookies. Browser windows opened as an account load roblox.com with that account's stored session and nothing else.",
                 string.Empty,
                 "Launching trades a cookie for a fresh authentication ticket and starts RobloxPlayerBeta.exe with that ticket.",
                 "Multi-instance support only creates the two session-wide kernel objects Roblox itself uses; nothing is injected into",

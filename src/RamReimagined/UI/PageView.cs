@@ -34,12 +34,12 @@ internal sealed class RoundedCard : Panel
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                  ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-        BackColor = Theme.Card;
+        BackColor = Theme.Backdrop;
         DoubleBuffered = true;
         Padding = new Padding(20, 16, 20, 16);
     }
 
-    public int Radius { get; set; } = 14;
+    public int Radius { get; set; } = Theme.RadiusCard;
 
     public Color Fill { get; set; } = Theme.Card;
 
@@ -64,7 +64,7 @@ internal sealed class SectionTitle : Label
     {
         Text = text;
         AutoSize = true;
-        Font = Theme.Font(10.5f, FontStyle.Bold);
+        Font = Theme.Font(10.8f, FontStyle.Bold);
         ForeColor = Theme.Text;
         BackColor = Color.Transparent;
     }
@@ -72,7 +72,7 @@ internal sealed class SectionTitle : Label
 
 internal sealed class MutedLabel : Label
 {
-    public MutedLabel(string text, float size = 8.75f)
+    public MutedLabel(string text, float size = 9f)
     {
         Text = text;
         AutoSize = false;

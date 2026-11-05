@@ -33,7 +33,74 @@ internal enum ToastKind
     Error
 }
 
-/// <summary>Floating status pill that confirms every action in the shell.</summary>
+/// <summary>Dark context menu shared by the account cards and the toolbar.</summary>
+internal static class DarkMenu
+{
+    public static ContextMenuStrip Create()
+    {
+        var menu = new ContextMenuStrip
+        {
+            BackColor = Theme.Panel,
+            ForeColor = Theme.Text,
+            ShowImageMargin = false,
+            Font = Theme.Font(9.25f),
+            Padding = new Padding(0, 4, 0, 4)
+        };
+        menu.Renderer = new Renderer();
+        return menu;
+    }
+
+    public static ToolStripMenuItem Item(string text, Action action, bool danger = false)
+    {
+        var item = new ToolStripMenuItem(text)
+        {
+            ForeColor = danger ? Theme.Danger : Theme.Text,
+            Padding = new Padding(12, 6, 16, 6)
+        };
+        item.Click += (_, _) => action();
+        return item;
+    }
+
+    public static ToolStripSeparator Separator()
+    {
+        var separator = new ToolStripSeparator();
+        return separator;
+    }
+
+    private sealed class Renderer : ToolStripProfessionalRenderer
+    {
+        public Renderer() : base(new Colors())
+        {
+            RoundedEdges = false;
+        }
+
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+        {
+            e.TextColor = e.Item?.ForeColor ?? Theme.Text;
+            base.OnRenderItemText(e);
+        }
+
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+        {
+            using var pen = new Pen(Theme.Stroke);
+            e.Graphics.DrawRectangle(pen, 0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1);
+        }
+
+        private sealed class Colors : ProfessionalColorTable
+        {
+            public override Color ToolStripDropDownBackground => Theme.Panel;
+            public override Color ImageMarginGradientBegin => Theme.Panel;
+            public override Color ImageMarginGradientMiddle => Theme.Panel;
+            public override Color ImageMarginGradientEnd => Theme.Panel;
+            public override Color MenuItemSelected => Theme.CardHover;
+            public override Color MenuItemBorder => Theme.Stroke;
+            public override Color SeparatorDark => Theme.StrokeSoft;
+            public override Color SeparatorLight => Theme.Panel;
+        }
+    }
+}
+
+/// <summary>Floating status strip that confirms every action in the shell.</summary>
 internal sealed class StatusToast : Control
 {
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 4200 };
@@ -47,6 +114,7 @@ internal sealed class StatusToast : Control
                  ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
                  ControlStyles.SupportsTransparentBackColor, true);
         BackColor = Color.Transparent;
+        Font = Theme.Font(9.25f);
         Width = 360;
         Height = 46;
         Visible = false;
@@ -65,11 +133,11 @@ internal sealed class StatusToast : Control
             ToastKind.Success => (Theme.Success, IconKind.Check),
             ToastKind.Warning => (Theme.Warning, IconKind.Info),
             ToastKind.Error => (Theme.Danger, IconKind.Close),
-            _ => (Theme.Accent, IconKind.Info)
+            _ => (Theme.Muted, IconKind.Info)
         };
 
-        var width = Math.Min(560, TextRenderer.MeasureText(message, Font).Width + 84);
-        Width = Math.Max(240, width);
+        var width = Math.Min(560, TextRenderer.MeasureText(message, Font).Width + 76);
+        Width = Math.Max(260, width);
         Visible = true;
         BringToFront();
         Invalidate();
@@ -82,15 +150,14 @@ internal sealed class StatusToast : Control
         var g = e.Graphics;
         Theme.EnableQuality(g);
         var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
-        Theme.FillRounded(g, bounds, 12, Theme.Elevated);
-        Theme.DrawRounded(g, bounds, 12, Theme.WithAlpha(_accent, 110));
+        Theme.FillRounded(g, bounds, Theme.RadiusControl, Theme.Panel);
+        Theme.DrawRounded(g, bounds, Theme.RadiusControl, Theme.Stroke);
 
-        var circle = new Rectangle(12, (Height - 22) / 2, 22, 22);
-        Theme.FillRounded(g, circle, 11, Theme.WithAlpha(_accent, 40));
-        Icons.Draw(g, _icon, circle, _accent, 1.7f);
+        Theme.FillRounded(g, new Rectangle(12, (Height - 8) / 2, 3, 8), 2, _accent);
+        Icons.Draw(g, _icon, new RectangleF(23, (Height - 16) / 2f, 16, 16), _accent, 1.6f);
 
-        Theme.DrawText(g, _message, Theme.Font(9.25f), Theme.Text,
-            new Rectangle(44, 0, Width - 58, Height),
+        Theme.DrawText(g, _message, Font, Theme.Text,
+            new Rectangle(47, 0, Width - 59, Height),
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
@@ -122,17 +189,17 @@ internal sealed class SheetForm : Form
         BackColor = Theme.Panel;
         DoubleBuffered = true;
         KeyPreview = true;
-        ClientSize = new Size(470, 196 + bodyHeight);
+        ClientSize = new Size(500, 206 + bodyHeight);
         Padding = new Padding(1);
 
         _titleLabel = new Label
         {
             Text = title,
-            Font = Theme.Font(13f, FontStyle.Bold),
+            Font = Theme.Font(12.5f, FontStyle.Bold),
             ForeColor = Theme.Text,
             BackColor = Color.Transparent,
             AutoSize = false,
-            Bounds = new Rectangle(24, 20, 360, 28)
+            Bounds = new Rectangle(24, 20, 400, 26)
         };
 
         _messageLabel = new Label
@@ -142,16 +209,16 @@ internal sealed class SheetForm : Form
             ForeColor = Theme.Muted,
             BackColor = Color.Transparent,
             AutoSize = false,
-            Bounds = new Rectangle(24, 52, 422, 42)
+            Bounds = new Rectangle(24, 50, 452, 46)
         };
 
         _bodyHost = new Panel
         {
             BackColor = Theme.Panel,
-            Bounds = new Rectangle(24, 100, 422, bodyHeight)
+            Bounds = new Rectangle(24, 100, 452, bodyHeight)
         };
 
-        _ok = new PillButton(okText) { Kind = danger ? ButtonKind.Danger : ButtonKind.Primary, Width = 130, Height = 38 };
+        _ok = new PillButton(okText) { Kind = danger ? ButtonKind.Danger : ButtonKind.Primary, Width = 132, Height = 38 };
         _ok.Click += (_, _) =>
         {
             DialogResult = DialogResult.OK;
@@ -165,7 +232,7 @@ internal sealed class SheetForm : Form
             Close();
         };
 
-        var close = new WindowButton(IconKind.Close, close: true) { Bounds = new Rectangle(ClientSize.Width - 56, 12, 40, 32) };
+        var close = new WindowButton(IconKind.Close, close: true) { Bounds = new Rectangle(ClientSize.Width - 54, 10, 36, 30) };
         close.Click += (_, _) =>
         {
             DialogResult = DialogResult.Cancel;
@@ -197,7 +264,7 @@ internal sealed class SheetForm : Form
                 DialogResult = DialogResult.Cancel;
                 Close();
             }
-            else if (e.KeyCode == Keys.Enter)
+            else if (e.KeyCode == Keys.Enter && ActiveControl is not TextBox { Multiline: true })
             {
                 DialogResult = DialogResult.OK;
                 Close();
@@ -215,13 +282,13 @@ internal sealed class SheetForm : Form
     {
         base.OnPaint(e);
         Theme.EnableQuality(e.Graphics);
-        Theme.DrawRounded(e.Graphics, new Rectangle(0, 0, Width - 1, Height - 1), 16, Theme.Stroke);
+        Theme.DrawRounded(e.Graphics, new Rectangle(0, 0, Width - 1, Height - 1), Theme.RadiusWindow, Theme.Stroke);
     }
 
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        using var path = Theme.RoundedRect(new Rectangle(0, 0, Width, Height), 16);
+        using var path = Theme.RoundedRect(new Rectangle(0, 0, Width, Height), Theme.RadiusWindow);
         Region = new Region(path);
     }
 }
@@ -232,8 +299,19 @@ internal static class Dialogs
         bool secret = false, string okText = "Continue", int bodyHeight = 42)
     {
         using var form = new SheetForm(title, message, okText, bodyHeight, danger: false);
-        var field = new TextField(placeholder) { UseSystemPasswordChar = secret, Height = 40 };
-        form.SetBody(field, 40);
+        var field = new TextField(placeholder) { UseSystemPasswordChar = secret, Height = bodyHeight };
+        form.SetBody(field, bodyHeight);
+        field.FocusInput();
+        return form.ShowDialog(owner) == DialogResult.OK ? field.Text.Trim() : null;
+    }
+
+    public static string? AskMultiline(IWin32Window? owner, string title, string message, string placeholder = "",
+        string okText = "Save", int bodyHeight = 120)
+    {
+        using var form = new SheetForm(title, message, okText, bodyHeight + 8, danger: false);
+        var field = new TextField(placeholder) { Multiline = true, Height = bodyHeight, Text = placeholder };
+        field.Text = "";
+        form.SetBody(field, bodyHeight);
         field.FocusInput();
         return form.ShowDialog(owner) == DialogResult.OK ? field.Text.Trim() : null;
     }

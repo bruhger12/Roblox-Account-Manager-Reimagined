@@ -23,7 +23,9 @@ internal enum IconKind
     External,
     Check,
     Folder,
-    Sparkle
+    Sparkle,
+    Globe,
+    Note
 }
 
 /// <summary>Small vector glyphs so the shell needs no icon font or image assets.</summary>
@@ -193,6 +195,19 @@ internal static class Icons
                 g.DrawLine(pen, 3.5f, 12f, 9f, 12f);
                 g.DrawLine(pen, 15f, 12f, 20.5f, 12f);
                 g.DrawEllipse(pen, 9.5f, 9.5f, 5f, 5f);
+                break;
+
+            case IconKind.Globe:
+                g.DrawEllipse(pen, 4f, 4f, 16f, 16f);
+                g.DrawEllipse(pen, 8.5f, 4f, 7f, 16f);
+                g.DrawLine(pen, 4f, 12f, 20f, 12f);
+                break;
+
+            case IconKind.Note:
+                g.DrawRectangle(pen, 5f, 4.5f, 14f, 15f);
+                g.DrawLine(pen, 8.5f, 9f, 15.5f, 9f);
+                g.DrawLine(pen, 8.5f, 12.5f, 15.5f, 12.5f);
+                g.DrawLine(pen, 8.5f, 16f, 13f, 16f);
                 break;
         }
 

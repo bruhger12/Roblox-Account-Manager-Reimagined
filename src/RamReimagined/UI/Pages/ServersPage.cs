@@ -128,7 +128,7 @@ internal sealed class ServersPage : PageView
             _gameLabel.Text = "Loading place…";
             _game = await App.Api.GetGameInfoAsync(placeId);
             _gameLabel.Text = _game is null
-                ? $"Place {placeId} — no universe information returned."
+                ? $"Place {placeId} · no universe information returned."
                 : $"{_game.Name}  ·  {_game.CreatorName}  ·  {_game.Playing:N0} playing  ·  max {_game.MaxPlayers}";
 
             var cookie = App.Store.Accounts.Select(App.Store.CookieFor)

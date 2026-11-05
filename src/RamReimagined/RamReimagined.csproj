@@ -17,6 +17,11 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- Custom-painted controls are built in code, not by the WinForms designer. -->
     <NoWarn>$(NoWarn);WFO1000</NoWarn>
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+  </ItemGroup>
 
 </Project>

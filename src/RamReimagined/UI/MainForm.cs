@@ -8,7 +8,6 @@ internal sealed class MainForm : Form
 
     private readonly AppState _app;
     private readonly RailPanel _rail;
-    private readonly Panel _titleStrip;
     private readonly Panel _header;
     private readonly Label _heading;
     private readonly Label _subheading;
@@ -29,31 +28,16 @@ internal sealed class MainForm : Form
         BackColor = Theme.Backdrop;
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(1060, 690);
-        ClientSize = new Size(Math.Clamp(_app.Settings.WindowWidth, 1060, 2400), Math.Clamp(_app.Settings.WindowHeight, 690, 1500));
+        ClientSize = new Size(Math.Clamp(_app.Settings.WindowWidth, 1060, 2400),
+            Math.Clamp(_app.Settings.WindowHeight, 690, 1500));
         KeyPreview = true;
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
 
         _rail = new RailPanel(_app) { Dock = DockStyle.Fill };
 
-        _titleStrip = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Backdrop };
-        var minimize = new WindowButton(IconKind.Minimize);
-        minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
-        var maximize = new WindowButton(IconKind.Maximize);
-        maximize.Click += (_, _) => ToggleMaximize();
-        var close = new WindowButton(IconKind.Close, close: true);
-        close.Click += (_, _) => Close();
-        _titleStrip.Controls.Add(minimize);
-        _titleStrip.Controls.Add(maximize);
-        _titleStrip.Controls.Add(close);
-        _titleStrip.Resize += (_, _) =>
-        {
-            close.Location = new Point(_titleStrip.ClientSize.Width - 48, 6);
-            maximize.Location = new Point(close.Left - 44, 6);
-            minimize.Location = new Point(maximize.Left - 44, 6);
-        };
-
         _header = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Backdrop };
+
         _heading = new Label
         {
             AutoSize = false,
@@ -61,7 +45,7 @@ internal sealed class MainForm : Form
             ForeColor = Theme.Text,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft,
-            Height = 34
+            Height = 32
         };
         _subheading = new Label
         {
@@ -70,7 +54,7 @@ internal sealed class MainForm : Form
             ForeColor = Theme.Muted,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft,
-            Height = 20
+            Height = 22
         };
         _actions = new FlowLayoutPanel
         {
@@ -79,36 +63,51 @@ internal sealed class MainForm : Form
             WrapContents = false,
             FlowDirection = FlowDirection.RightToLeft,
             BackColor = Color.Transparent,
-            Height = 40,
+            Height = 38,
             Margin = Padding.Empty
         };
+
+        var minimize = new WindowButton(IconKind.Minimize);
+        minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
+        var maximize = new WindowButton(IconKind.Maximize);
+        maximize.Click += (_, _) => ToggleMaximize();
+        var close = new WindowButton(IconKind.Close, close: true);
+        close.Click += (_, _) => Close();
+
         _header.Controls.Add(_heading);
         _header.Controls.Add(_subheading);
         _header.Controls.Add(_actions);
+        _header.Controls.Add(minimize);
+        _header.Controls.Add(maximize);
+        _header.Controls.Add(close);
+
         _header.Resize += (_, _) =>
         {
-            _heading.SetBounds(32, 16, Math.Max(200, _header.ClientSize.Width - 420), 34);
-            _subheading.SetBounds(32, 52, Math.Max(200, _header.ClientSize.Width - 420), 20);
-            _actions.Location = new Point(_header.ClientSize.Width - 32 - _actions.Width, 26);
+            close.Location = new Point(_header.ClientSize.Width - 16 - close.Width, 12);
+            maximize.Location = new Point(close.Left - maximize.Width, 12);
+            minimize.Location = new Point(maximize.Left - minimize.Width, 12);
+
+            var textRight = Math.Max(220, minimize.Left - 24);
+            _heading.SetBounds(30, 16, Math.Max(180, textRight - 260), 32);
+            _subheading.SetBounds(30, 49, Math.Max(180, textRight - 260), 22);
+            _actions.Location = new Point(Math.Max(220, textRight - _actions.Width), 23);
         };
 
-        _pageHost = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Backdrop, Padding = new Padding(32, 0, 32, 22) };
+        _pageHost = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Backdrop, Padding = new Padding(30, 0, 30, 22) };
 
         var content = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 2,
             BackColor = Theme.Backdrop,
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
         content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        content.Controls.Add(_titleStrip, 0, 0);
-        content.Controls.Add(_header, 0, 1);
-        content.Controls.Add(_pageHost, 0, 2);
+        content.Controls.Add(_header, 0, 0);
+        content.Controls.Add(_pageHost, 0, 1);
 
         var root = new TableLayoutPanel
         {
@@ -119,7 +118,7 @@ internal sealed class MainForm : Form
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 238));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 232));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.Controls.Add(_rail, 0, 0);
         root.Controls.Add(content, 1, 0);
@@ -134,14 +133,17 @@ internal sealed class MainForm : Form
 
         BuildPages();
 
-        _titleStrip.MouseDown += (_, e) =>
+        foreach (var draggable in new Control[] { _header, _heading, _subheading })
         {
-            if (e.Button == MouseButtons.Left)
+            draggable.MouseDown += (_, e) =>
             {
-                WindowChrome.Drag(this);
-            }
-        };
-        _titleStrip.DoubleClick += (_, _) => ToggleMaximize();
+                if (e.Button == MouseButtons.Left)
+                {
+                    WindowChrome.Drag(this);
+                }
+            };
+            draggable.DoubleClick += (_, _) => ToggleMaximize();
+        }
 
         _presenceTimer = new System.Windows.Forms.Timer { Interval = 60_000 };
         _presenceTimer.Tick += async (_, _) => await RefreshPresenceAsync();
@@ -302,7 +304,7 @@ internal sealed class MainForm : Form
             return;
         }
 
-        using var path = Theme.RoundedRect(new Rectangle(0, 0, Width, Height), 14);
+        using var path = Theme.RoundedRect(new Rectangle(0, 0, Width, Height), Theme.RadiusWindow);
         Region = new Region(path);
     }
 
@@ -351,7 +353,7 @@ internal static class AppTimers
     }
 }
 
-/// <summary>Left navigation rail with the brand mark, section items and environment status.</summary>
+/// <summary>Left navigation rail: flat mark, section items, environment status.</summary>
 internal sealed class RailPanel : Panel
 {
     private readonly AppState _app;
@@ -374,11 +376,11 @@ internal sealed class RailPanel : Panel
 
     private void LayoutItems()
     {
-        var y = 108;
+        var y = 98;
         foreach (var item in _items)
         {
-            item.SetBounds(0, y, Width, 42);
-            y += 44;
+            item.SetBounds(0, y, Width, 38);
+            y += 40;
         }
     }
 
@@ -398,34 +400,28 @@ internal sealed class RailPanel : Panel
             g.FillRectangle(brush, ClientRectangle);
         }
 
-        var mark = new Rectangle(20, 24, 38, 38);
-        Theme.FillGradient(g, mark, 12, Theme.Accent, Color.FromArgb(64, 44, 168));
-        var markFont = Theme.Font(17f, FontStyle.Bold);
-        Theme.DrawText(g, "R", markFont, Color.White, mark,
+        var mark = new Rectangle(20, 22, 32, 32);
+        Theme.FillRounded(g, mark, 9, Theme.Text);
+        Theme.DrawText(g, "R", Theme.Font(14f, FontStyle.Bold), Theme.Backdrop, mark,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
 
-        var titleFont = Theme.Font(11.5f, FontStyle.Bold);
-        Theme.DrawText(g, "Reimagined", titleFont, Theme.Text, new Rectangle(68, 28, Width - 78, 20));
-        var subFont = Theme.Font(7.75f);
-        Theme.DrawText(g, "ROBLOX ACCOUNT MANAGER", subFont, Theme.Faint, new Rectangle(69, 46, Width - 78, 16));
+        Theme.DrawText(g, "Reimagined", Theme.Font(11.5f, FontStyle.Bold), Theme.Text,
+            new Rectangle(62, 22, Width - 74, 18));
+        Theme.DrawText(g, "ROBLOX ACCOUNT MANAGER", Theme.Mono(8.5f), Theme.Faint,
+            new Rectangle(62, 40, Width - 74, 16));
 
-        using (var pen = new Pen(Theme.StrokeSoft))
-        {
-            g.DrawLine(pen, 20, 88, Width - 20, 88);
-        }
+        Theme.DrawHairline(g, 20, 82, Width - 40);
 
-        // Footer: client detection + version.
-        var footerY = Height - 74;
+        var footerY = Height - 76;
         var ready = _app.Launcher.PlayerPath is not null;
-        Theme.FillRounded(g, new Rectangle(22, footerY + 4, 7, 7), 4, ready ? Theme.Success : Theme.Warning);
+        Theme.FillRounded(g, new Rectangle(20, footerY + 5, 6, 6), 3, ready ? Theme.Success : Theme.Warning);
         Theme.DrawText(g, ready ? "Roblox client detected" : "Roblox client not found",
-            Theme.Font(7.9f), ready ? Theme.Muted : Theme.Warning, new Rectangle(36, footerY - 4, Width - 48, 22));
-        Theme.DrawText(g, "v1.0.0  ·  GPL-3.0  ·  fork of ic3w0lf22",
-            Theme.Font(7.5f), Theme.Faint, new Rectangle(22, footerY + 22, Width - 32, 20));
+            Theme.Font(9f), ready ? Theme.Muted : Theme.Warning, new Rectangle(33, footerY - 3, Width - 44, 22));
+        Theme.DrawText(g, "v1.1.0", Theme.Mono(9f), Theme.Faint, new Rectangle(20, footerY + 22, Width - 32, 18));
+        Theme.DrawText(g, "GPL-3.0 · fork of ic3w0lf22", Theme.Font(8.9f), Theme.Faint,
+            new Rectangle(20, footerY + 40, Width - 32, 18));
 
-        using (var pen = new Pen(Theme.StrokeSoft))
-        {
-            g.DrawLine(pen, Width - 1, 0, Width - 1, Height);
-        }
+        using var pen = new Pen(Theme.StrokeSoft);
+        g.DrawLine(pen, Width - 1, 0, Width - 1, Height);
     }
 }
